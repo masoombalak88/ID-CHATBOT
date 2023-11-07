@@ -1,7 +1,7 @@
 flask==2.1.1
 werkzeug==2.0.3
 aiohttp
-pyrogram==1.4.16
+pyrogram
 pymongo
 requests
 dnspython
