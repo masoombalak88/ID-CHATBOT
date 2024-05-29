@@ -2,6 +2,7 @@ import random
 from pymongo import MongoClient
 from pyrogram import Client, filters
 from config import MONGO_DB_URI as MONGO_URL
+from pyrogram.enums import ChatAction
 
 # Initialize MongoDB connection once
 mongo_client = MongoClient(MONGO_URL)
