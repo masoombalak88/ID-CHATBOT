@@ -1,258 +1,77 @@
-# © Vip TEAM
-from pyrogram import Client, filters
-import asyncio
-from pyrogram.types import *
-from pymongo import MongoClient
-import requests
 import random
-from pyrogram.errors import (
-    PeerIdInvalid,
-    ChatWriteForbidden
-)
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
-from pyrogram.errors import ChatAdminRequired, UserNotParticipant, ChatWriteForbidden
-import os
-import re
+from pymongo import MongoClient
+from pyrogram import Client, filters
+from config import MONGO_DB_URI as MONGO_URL
 
+# Initialize MongoDB connection once
+mongo_client = MongoClient(MONGO_URL)
+chatdb = mongo_client["Word"]["WordDb"]
+vipdb = mongo_client["VipDb"]["Vip"]
 
-API_ID = "14050586"
-API_HASH = "42a60d9c657b106370c79bb0a8ac560c"
-SESSION_NAME = os.environ.get("SESSION_NAME", "")
-MONGO_URL = os.environ.get("MONGO_URL", "")
+# Helper function to handle sending messages or stickers
+async def send_reply(client, message, text_or_sticker):
+    if text_or_sticker["check"] == "sticker":
+        await message.reply_sticker(text_or_sticker["text"])
+    else:
+        await message.reply_text(text_or_sticker["text"])
 
-
-client = Client(SESSION_NAME, API_ID, API_HASH)
-
-
-
-
-
-@client.on_message(
-    filters.command("alive", prefixes=["/", ".", "?", "-"])
-    & ~filters.private)
+# Handler for the "alive" command
+@Client.on_message(filters.command("alive", prefixes=["/", ".", "?", "-"]))
 async def start(client, message):
-    await message.reply_text(f"**ᴀʟᴇxᴀ ᴀɪ ᴜsᴇʀʙᴏᴛ ғᴏʀ ᴄʜᴀᴛᴛɪɴɢ ɪs ᴡᴏʀᴋɪɴɢ**")
-    
-    
-@client.on_message(
- (
-        filters.text
-        | filters.sticker
-    )
-    & ~filters.private
-    & ~filters.me
-    & ~filters.bot,
-)
-async def Vipai(client: Client, message: Message):
+    await message.reply_text("**ᴀʟᴇxᴀ ᴀɪ ᴜsᴇʀʙᴏᴛ ғᴏʀ ᴄʜᴀᴛᴛɪɴɢ ɪs ᴡᴏʀᴋɪɴɢ**")
 
-   chatdb = MongoClient(MONGO_URL)
-   chatai = chatdb["Word"]["WordDb"]   
+# General handler for text and sticker messages in groups
+@Client.on_message((filters.text | filters.sticker) & ~filters.private & ~filters.me & ~filters.bot)
+async def handle_group_message(client, message):
+    is_vip = vipdb.find_one({"chat_id": message.chat.id})
+    if is_vip:
+        return
 
-   if not message.reply_to_message:
-       Vipdb = MongoClient(MONGO_URL)
-       Vip = Vipdb["VipDb"]["Vip"] 
-       is_Vip = Vip.find_one({"chat_id": message.chat.id})
-       if not is_Vip:
-           await client.send_chat_action(message.chat.id, "typing")
-           K = []  
-           is_chat = chatai.find({"word": message.text})  
-           k = chatai.find_one({"word": message.text})      
-           if k:               
-               for x in is_chat:
-                   K.append(x['text'])          
-               hey = random.choice(K)
-               is_text = chatai.find_one({"text": hey})
-               Yo = is_text['check']
-               if Yo == "sticker":
-                   await message.reply_sticker(f"{hey}")
-               if not Yo == "sticker":
-                   await message.reply_text(f"{hey}")
-   
-   if message.reply_to_message:  
-       Vipdb = MongoClient(MONGO_URL)
-       Vip = Vipdb["VipDb"]["Vip"] 
-       is_Vip = Vip.find_one({"chat_id": message.chat.id})    
-       getme = await client.get_me()
-       user_id = getme.id                             
-       if message.reply_to_message.from_user.id == user_id: 
-           if not is_Vip:                   
-               await client.send_chat_action(message.chat.id, "typing")
-               K = []  
-               is_chat = chatai.find({"word": message.text})
-               k = chatai.find_one({"word": message.text})      
-               if k:       
-                   for x in is_chat:
-                       K.append(x['text'])
-                   hey = random.choice(K)
-                   is_text = chatai.find_one({"text": hey})
-                   Yo = is_text['check']
-                   if Yo == "sticker":
-                       await message.reply_sticker(f"{hey}")
-                   if not Yo == "sticker":
-                       await message.reply_text(f"{hey}")
-       if not message.reply_to_message.from_user.id == user_id:          
-           if message.sticker:
-               is_chat = chatai.find_one({"word": message.reply_to_message.text, "id": message.sticker.file_unique_id})
-               if not is_chat:
-                   chatai.insert_one({"word": message.reply_to_message.text, "text": message.sticker.file_id, "check": "sticker", "id": message.sticker.file_unique_id})
-           if message.text:                 
-               is_chat = chatai.find_one({"word": message.reply_to_message.text, "text": message.text})                 
-               if not is_chat:
-                   chatai.insert_one({"word": message.reply_to_message.text, "text": message.text, "check": "none"})                                                                                                                                               
+    await client.send_chat_action(message.chat.id, "typing")
 
-@client.on_message(
- (
-        filters.sticker
-        | filters.text
-    )
-    & ~filters.private
-    & ~filters.me
-    & ~filters.bot,
-)
-async def Vipstickerai(client: Client, message: Message):
+    if not message.reply_to_message:
+        word = message.text if message.text else message.sticker.file_unique_id
+        responses = list(chatdb.find({"word": word}))
+        if responses:
+            response = random.choice(responses)
+            await send_reply(client, message, response)
+    else:
+        user_id = (await client.get_me()).id
+        if message.reply_to_message.from_user.id == user_id:
+            responses = list(chatdb.find({"word": message.text}))
+            if responses:
+                response = random.choice(responses)
+                await send_reply(client, message, response)
+        else:
+            if message.text:
+                chatdb.update_one(
+                    {"word": message.reply_to_message.text, "text": message.text},
+                    {"$set": {"check": "none"}},
+                    upsert=True,
+                )
+            if message.sticker:
+                chatdb.update_one(
+                    {"word": message.reply_to_message.text, "text": message.sticker.file_id},
+                    {"$set": {"check": "sticker", "id": message.sticker.file_unique_id}},
+                    upsert=True,
+                )
 
-   chatdb = MongoClient(MONGO_URL)
-   chatai = chatdb["Word"]["WordDb"]   
+# Handler for text and sticker messages in private chats
+@Client.on_message((filters.text | filters.sticker) & filters.private & ~filters.me & ~filters.bot)
+async def handle_private_message(client, message):
+    await client.send_chat_action(message.chat.id, "typing")
 
-   if not message.reply_to_message:
-       Vipdb = MongoClient(MONGO_URL)
-       Vip = Vipdb["VipDb"]["Vip"] 
-       is_Vip = Vip.find_one({"chat_id": message.chat.id})
-       if not is_Vip:
-           await client.send_chat_action(message.chat.id, "typing")
-           K = []  
-           is_chat = chatai.find({"word": message.sticker.file_unique_id})      
-           k = chatai.find_one({"word": message.text})      
-           if k:           
-               for x in is_chat:
-                   K.append(x['text'])
-               hey = random.choice(K)
-               is_text = chatai.find_one({"text": hey})
-               Yo = is_text['check']
-               if Yo == "text":
-                   await message.reply_text(f"{hey}")
-               if not Yo == "text":
-                   await message.reply_sticker(f"{hey}")
-   
-   if message.reply_to_message:
-       Vipdb = MongoClient(MONGO_URL)
-       Vip = Vipdb["VipDb"]["Vip"] 
-       is_Vip = Vip.find_one({"chat_id": message.chat.id})
-       getme = await client.get_me()
-       user_id = getme.id
-       if message.reply_to_message.from_user.id == user_id: 
-           if not is_Vip:                    
-               await client.send_chat_action(message.chat.id, "typing")
-               K = []  
-               is_chat = chatai.find({"word": message.text})
-               k = chatai.find_one({"word": message.text})      
-               if k:           
-                   for x in is_chat:
-                       K.append(x['text'])
-                   hey = random.choice(K)
-                   is_text = chatai.find_one({"text": hey})
-                   Yo = is_text['check']
-                   if Yo == "text":
-                       await message.reply_text(f"{hey}")
-                   if not Yo == "text":
-                       await message.reply_sticker(f"{hey}")
-       if not message.reply_to_message.from_user.id == user_id:          
-           if message.text:
-               is_chat = chatai.find_one({"word": message.reply_to_message.sticker.file_unique_id, "text": message.text})
-               if not is_chat:
-                   toggle.insert_one({"word": message.reply_to_message.sticker.file_unique_id, "text": message.text, "check": "text"})
-           if message.sticker:                 
-               is_chat = chatai.find_one({"word": message.reply_to_message.sticker.file_unique_id, "text": message.sticker.file_id})                 
-               if not is_chat:
-                   chatai.insert_one({"word": message.reply_to_message.sticker.file_unique_id, "text": message.sticker.file_id, "check": "none"})    
-              
+    if not message.reply_to_message:
+        responses = list(chatdb.find({"word": message.text}))
+        if responses:
+            response = random.choice(responses)
+            await send_reply(client, message, response)
+    else:
+        user_id = (await client.get_me()).id
+        if message.reply_to_message.from_user.id == user_id:
+            responses = list(chatdb.find({"word": message.text}))
+            if responses:
+                response = random.choice(responses)
+                await send_reply(client, message, response)
 
-
-@client.on_message(
-    (
-        filters.text
-        | filters.sticker
-    )
-    & filters.private
-    & ~filters.me
-    & ~filters.bot,
-)
-async def Vipprivate(client: Client, message: Message):
-
-   chatdb = MongoClient(MONGO_URL)
-   chatai = chatdb["Word"]["WordDb"]
-   if not message.reply_to_message: 
-       await client.send_chat_action(message.chat.id, "typing")
-       K = []  
-       is_chat = chatai.find({"word": message.text})                 
-       for x in is_chat:
-           K.append(x['text'])
-       hey = random.choice(K)
-       is_text = chatai.find_one({"text": hey})
-       Yo = is_text['check']
-       if Yo == "sticker":
-           await message.reply_sticker(f"{hey}")
-       if not Yo == "sticker":
-           await message.reply_text(f"{hey}")
-   if message.reply_to_message:            
-       getme = await client.get_me()
-       user_id = getme.id       
-       if message.reply_to_message.from_user.id == user_id:                    
-           await client.send_chat_action(message.chat.id, "typing")
-           K = []  
-           is_chat = chatai.find({"word": message.text})                 
-           for x in is_chat:
-               K.append(x['text'])
-           hey = random.choice(K)
-           is_text = chatai.find_one({"text": hey})
-           Yo = is_text['check']
-           if Yo == "sticker":
-               await message.reply_sticker(f"{hey}")
-           if not Yo == "sticker":
-               await message.reply_text(f"{hey}")
-                     
-@client.on_message(
- (
-        filters.sticker
-        | filters.text
-    )
-    & filters.private
-    & ~filters.me
-    & ~filters.bot,
-)
-async def Vipprivatesticker(client: Client, message: Message):
-
-   chatdb = MongoClient(MONGO_URL)
-   chatai = chatdb["Word"]["WordDb"] 
-   if not message.reply_to_message:
-       await client.send_chat_action(message.chat.id, "typing")
-       K = []  
-       is_chat = chatai.find({"word": message.sticker.file_unique_id})                 
-       for x in is_chat:
-           K.append(x['text'])
-       hey = random.choice(K)
-       is_text = chatai.find_one({"text": hey})
-       Yo = is_text['check']
-       if Yo == "text":
-           await message.reply_text(f"{hey}")
-       if not Yo == "text":
-           await message.reply_sticker(f"{hey}")
-   if message.reply_to_message:            
-       getme = await client.get_me()
-       user_id = getme.id       
-       if message.reply_to_message.from_user.id == user_id:                    
-           await client.send_chat_action(message.chat.id, "typing")
-           K = []  
-           is_chat = chatai.find({"word": message.sticker.file_unique_id})                 
-           for x in is_chat:
-               K.append(x['text'])
-           hey = random.choice(K)
-           is_text = chatai.find_one({"text": hey})
-           Yo = is_text['check']
-           if Yo == "text":
-               await message.reply_text(f"{hey}")
-           if not Yo == "text":
-               await message.reply_sticker(f"{hey}")
-               
-
-client.run()
+# Start the client with your API ID and hash (replace with actual values)
