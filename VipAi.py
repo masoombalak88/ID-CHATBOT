@@ -28,8 +28,7 @@ async def handle_group_message(client, message):
     if is_vip:
         return
 
-    await client.send_chat_action(message.chat.id, "typing")
-
+    
     if not message.reply_to_message:
         word = message.text if message.text else message.sticker.file_unique_id
         responses = list(chatdb.find({"word": word}))
@@ -60,7 +59,7 @@ async def handle_group_message(client, message):
 # Handler for text and sticker messages in private chats
 @Client.on_message((filters.text | filters.sticker) & filters.private & ~filters.me & ~filters.bot)
 async def handle_private_message(client, message):
-    await client.send_chat_action(message.chat.id, "typing")
+    
 
     if not message.reply_to_message:
         responses = list(chatdb.find({"word": message.text}))
