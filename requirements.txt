@@ -1,9 +1,0 @@
-flask==2.1.1
-werkzeug==2.0.3
-aiohttp
-pyrogram
-pymongo
-requests
-dnspython
-tgcrypto==1.2.2
-python-dotenv
